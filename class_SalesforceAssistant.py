@@ -25,13 +25,9 @@ class SalesforcePreAssistant:
     def getnameids(self, varName, varType):
         sf = sfSimple(username=self.sfUsername, password=self.sfPassword, security_token=self.sfToken)
         varURL = self.url_getid
-        body = {
-            "search_object": varType, 
-            "search_value": varName
-        }
+        body = {"search_object": varType, "search_value": varName}
 
         response = requests.post(varURL, json=body)
-
         return response.json()
 
     def getfields(self, varObject):
@@ -58,13 +54,8 @@ class SalesforcePreAssistant:
             )
         )
 
-        names_chain = LLMChain(
-            llm=self.llm,
-            prompt=names_prompt
-        )
-
+        names_chain = LLMChain(llm=self.llm, prompt=names_prompt)
         namelist = names_chain.run(input_string)
-
         namelist = json.loads(namelist)
         responselist = []
 
@@ -74,10 +65,6 @@ class SalesforcePreAssistant:
             response = self.getnameids(searchvalue, searchobject)
             if 'error' not in response:
                 responselist.append(response)
-
-            #print(response)
-        
-        #print(responselist)
         return responselist
     
     def process_object(self, userprompt):
@@ -95,51 +82,32 @@ class SalesforcePreAssistant:
             )
         )
 
-        fields_chain = LLMChain(
-            llm=self.llm,
-            prompt = fields_prompt
+        fields_chain = LLMChain(llm=self.llm, prompt = fields_prompt)
+        fields_chain_output = fields_chain.run({"object_list": self.object_list, "user_input": userprompt})
+        fields_chain_output = fields_chain_output.split()[-1]                                                   
+        fields_list=self.getfields(fields_chain_output)
+
+        return fields_list
+
+
+    def get_SalesforcePreAssistant(self, varUserInput):
+        response_getids = self.process_input(varUserInput)
+        response_getfields = self.process_object(varUserInput)
+        prompt = PromptTemplate(
+            input_variables=["varUserInput", "response_getids", "response_getfields"],
+            template=("""
+                You are a programming expert and helpful assistant. 
+                You will create bash or python code using simple_salesforce based on the request of the user. 
+                You will be given a list of relevant Ids and fields to help construct this code. 
+                Id fields should use the value in recordid. Ex: Id, OwnerId, AccountId, etc.. should use the recordid provided.
+                Do not add any fields that are not directly mentioned or implicitly inferred in the users input.    
+                Return only the code.
+                    User Request: {varUserInput}
+                    Relevant Ids: {response_getids}
+                    Relevant Fields: {response_getfields}
+                    """
+            )
         )
-
-        a= fields_chain.run({"object_list": self.object_list, "user_input": userprompt})
-        a = a.split()[-1]
-        #print(f"Debug: a = {a}")
-        b=self.getfields(a)
-
-        #print(b)
-
-        return b
-#llm = OpenAI(temperature=0.0, openai_api_key=st.secrets.openai.OPENAI_API_KEY)
-#url1 = "https://prod-24.westus.logic.azure.com:443/workflows/a236078c6312479abc2220c90063998c/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=swgcCo96aTVrTvm1eZR_GzC9kernAH_0Pkshyo2wICg"
-
-#assistant = SalesforcePreAssistant()
-#assistant.process_input("Create an opportunity for PH Dermatology and assign the owner to David Heddon")
-#assistant.process_object("Create an opportunity for PH Dermatology and assign the owner to David Heddon")
-
-def get_SalesforcePreAssistant(varUserInput):
-    llm = OpenAI(temperature=0, openai_api_key=st.secrets.openai.OPENAI_API_KEY)
-    assistant = SalesforcePreAssistant()
-    response_getids = assistant.process_input(varUserInput)
-    response_getfields = assistant.process_object(varUserInput)
-    prompt = PromptTemplate(
-        input_variables=["varUserInput", "response_getids", "response_getfields"],
-        template=("""
-            You are a programming expert and helpful assistant. 
-            You will create bash or python code using simple_salesforce based on the request of the user. 
-            You will be given a list of relevant Ids and fields to help construct this code. 
-            Id fields should use the value in recordid. Ex: Id, OwnerId, AccountId, etc.. should use the recordid provided.
-            Return only the code.
-                User Request: {varUserInput}
-                Relevant Ids: {response_getids}
-                Relevant Fields: {response_getfields}
-                """
-        )
-    )
-    #print(prompt)
-    schain = LLMChain(llm=llm, prompt=prompt)
-    sresponse = schain.run({"varUserInput": varUserInput, "response_getids": response_getids, "response_getfields": response_getfields})
-    #print(sresponse)
-    return sresponse
-
-userinput = "Create an opportunity for PH Dermatology and assign the owner to David Heddon general check in survye date 2023 07 14"
-a = get_SalesforcePreAssistant(userinput)
-#print(a)
+        schain = LLMChain(llm=self.llm, prompt=prompt)
+        sresponse = schain.run({"varUserInput": varUserInput, "response_getids": response_getids, "response_getfields": response_getfields})
+        return sresponse
